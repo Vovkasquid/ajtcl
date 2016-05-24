@@ -346,7 +346,7 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
     uint8_t finished = FALSE;
 
 #ifdef AJ_SERIAL_CONNECTION
-    AJ_Time start, now;
+    AJ_Time start;
     AJ_InitTimer(&start);
 #endif
 
@@ -399,7 +399,6 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
 #elif defined(AJ_SERIAL_CONNECTION)
         // don't bother with discovery, we are connected to a daemon.
         // however, take this opportunity to bring up the serial connection
-	(void)connectionTimer; // eliminate warning
         status = AJ_Serial_Up();
         if (status != AJ_OK) {
             AJ_InfoPrintf(("AJ_FindBusAndConnect(): AJ_Serial_Up status=%s\n", AJ_StatusText(status)));
@@ -414,19 +413,21 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
         }
 #endif
 
+#if defined(AJ_TCP) || defined(AJ_ARDP)
         // this calls into platform code that will decide whether to use UDP or TCP, based on what is available
         status = AJ_Net_Connect(bus, &service);
         if (status != AJ_OK) {
             AJ_InfoPrintf(("AJ_FindBusAndConnect(): AJ_Net_Connect status=%s\n", AJ_StatusText(status)));
             goto ExitConnect;
         }
+#endif
 
 #ifdef AJ_SERIAL_CONNECTION
         // run the state machine for long enough to (hopefully) do the SLAP handshake
         do {
             AJ_StateMachine();
-            AJ_InitTimer(&now);
-        } while (AJ_SerialLinkParams.linkState != AJ_LINK_ACTIVE && AJ_GetTimeDifference(&now, &start) < timeout);
+            AJ_InitTimer(&connectionTimer);
+        } while (AJ_SerialLinkParams.linkState != AJ_LINK_ACTIVE && AJ_GetTimeDifference(&connectionTimer, &start) < timeout);
 
         if (AJ_SerialLinkParams.linkState != AJ_LINK_ACTIVE) {
             AJ_InfoPrintf(("AJ_FindBusAndConnect(): Failed to establish active SLAP connection in %u msec\n", timeout));
