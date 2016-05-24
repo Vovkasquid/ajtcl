@@ -113,7 +113,7 @@ AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config);
 /**
  * This function initialized the UART piece of the transport.
  */
-AJ_Status AJ_SerialTargetInit(const char* ttyName);
+AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate);
 
 void AJ_SetRxCB(AJ_SerIORxCompleteFunc rx_cb);
 void AJ_SetTxCB(AJ_SerIOTxCompleteFunc tx_cb);

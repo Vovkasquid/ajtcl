@@ -26,6 +26,7 @@
 #include <ajtcl/aj_target.h>
 #include <ajtcl/aj_status.h>
 #include <ajtcl/aj_debug.h>
+#include <ajtcl/aj_serio.h>
 
 /**
  * Turn on per-module debug printing by setting this variable to non-zero value
@@ -40,7 +41,7 @@ uint8_t dbgTARGET_SERIAL = 0;
 /**
  * This function initialized the UART piece of the transport.
  */
-AJ_Status AJ_SerialTargetInit(const char* ttyName)
+AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate)
 {
     AJ_ErrPrintf(("AJ_SerialTargetInit(): Serial undefined on this target\n"));
     assert(0);
