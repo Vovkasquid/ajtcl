@@ -343,7 +343,6 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
     AJ_Status status;
     AJ_Service service;
     AJ_Time connectionTimer;
-    int32_t connectionTime;
     uint8_t finished = FALSE;
 
 #ifdef AJ_SERIAL_CONNECTION
@@ -372,8 +371,10 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
     }
 
     while (finished == FALSE) {
+#if !AJ_CONNECT_LOCALHOST && !defined(ARDUINO) && !defined(AJ_SERIAL_CONNECTION)
+        int32_t connectionTime = (int32_t) timeout;
+#endif
         finished = TRUE;
-        connectionTime = (int32_t) timeout;
 
 #if AJ_CONNECT_LOCALHOST
         service.ipv4port = 9955;
@@ -398,6 +399,7 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
 #elif defined(AJ_SERIAL_CONNECTION)
         // don't bother with discovery, we are connected to a daemon.
         // however, take this opportunity to bring up the serial connection
+	(void)connectionTimer; // eliminate warning
         status = AJ_Serial_Up();
         if (status != AJ_OK) {
             AJ_InfoPrintf(("AJ_FindBusAndConnect(): AJ_Serial_Up status=%s\n", AJ_StatusText(status)));
