@@ -31,6 +31,7 @@ html/
 build/
 dist/
 ajlite.nvram
+ajtcl.nvram
 .whitespace.db
 *.pyc
 *.exp
