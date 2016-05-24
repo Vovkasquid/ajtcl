@@ -108,6 +108,13 @@ typedef void (*AJ_SerialTxFunc)(uint8_t* buf, uint32_t len);
  */
 AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config);
 
+/******************** target API ******************************/
+
+/**
+ * This function initialized the UART piece of the transport.
+ */
+AJ_Status AJ_SerialTargetInit(const char* ttyName);
+
 void AJ_SetRxCB(AJ_SerIORxCompleteFunc rx_cb);
 void AJ_SetTxCB(AJ_SerIOTxCompleteFunc tx_cb);
 void AJ_SetTxSerialTransmit(AJ_SerialTxFunc tx_func);
