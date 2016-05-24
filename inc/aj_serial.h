@@ -151,7 +151,7 @@ extern AJ_LinkParameters AJ_SerialLinkParams;
 /*
  * Handle a link control packet.
  */
-void AJ_SerialLinkPacket(uint8_t* buffer,
+void AJ_Serial_LinkPacket(uint8_t* buffer,
                          uint16_t len);
 
 
