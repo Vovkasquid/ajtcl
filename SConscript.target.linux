@@ -69,7 +69,8 @@ else:
     env.Append(LINKFLAGS = '-s')
 
 env['build_shared'] = True
-env['connectivity_options'] = [ 'tcp', 'ardp' ]
+#$env['connectivity_options'] = [ 'tcp', 'ardp' ]
+env['connectivity_options'] = [ 'serial_connection' ]
 
 # Large Memory Platform
 env.Append(CPPDEFINES = ['AJ_NVRAM_SIZE=64000'])
