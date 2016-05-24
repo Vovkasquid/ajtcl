@@ -220,6 +220,14 @@ AJ_Status AJ_SerialRecv(uint8_t* buffer,
  */
 void AJ_SerialDisconnect(void);
 
+/** The state machine which is called from AJ_SerialRecv and AJ_SerialSend.
+ * This processes any buffers copied in the Recieve Callback, adds
+ * buffers to be written in the Transmit Callback, resends packets
+ * after a timeout and sends pure acks in the case of lack of data to send.
+ * Also, this sends link control packets periodically depending on the state.
+ */
+void AJ_StateMachine();
+
 #ifdef __cplusplus
 }
 #endif
