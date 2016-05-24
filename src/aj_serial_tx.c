@@ -30,6 +30,7 @@
 #include <ajtcl/aj_serial.h>
 #include <ajtcl/aj_serial_rx.h>
 #include <ajtcl/aj_serial_tx.h>
+#include <ajtcl/aj_serio.h>
 #include <ajtcl/aj_crc16.h>
 #include <ajtcl/aj_util.h>
 #include <ajtcl/aj_debug.h>
