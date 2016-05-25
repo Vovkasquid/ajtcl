@@ -33,6 +33,9 @@
 #include <ajtcl/aj_disco.h>
 #include <ajtcl/aj_wifi_ctrl.h>
 #include <ajtcl/aj_guid.h>
+#ifdef AJ_SERIAL_CONNECTION
+#include <ajtcl/aj_serial.h>
+#endif
 
 #ifndef NDEBUG
 AJ_EXPORT uint8_t dbgNETBUSSAMPLE = 0;
