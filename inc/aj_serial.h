@@ -111,18 +111,6 @@ typedef struct __AJ_SlippedBuffer {
     struct __AJ_SlippedBuffer volatile* next;
 } AJ_SlippedBuffer;
 
-/**
- * Function pointer type for an abstracted serial transmit function
- *
- * @param buf     The buffer to be transmitted
- * @param len     The number of bytes to write
- */
-typedef void (*AJ_SerialTxFunc)(uint8_t* buf, uint32_t len);
-/**
- * global function pointer for serial transmit funciton
- */
-extern AJ_SerialTxFunc g_AJ_TX;
-
 void ClearSlippedBuffer(volatile AJ_SlippedBuffer* buf);
 
 extern volatile int dataReceived;
