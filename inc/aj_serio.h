@@ -40,7 +40,7 @@ typedef struct _AJ_SerIOConfig {
     uint8_t bits;       /**< The number of data bits */
     uint8_t stopBits;  /**< The number of stop bits */
     uint8_t parity;    /**< Zero disables parity checking, one means odd and two means even parity */
-    void*    config;    /**< Abstracted context for device/platform specific configuration items */
+    const void *config;    /**< Abstracted context for device/platform specific configuration items */
 } AJ_SerIOConfig;
 
 /**
@@ -108,10 +108,13 @@ typedef void (*AJ_SerialTxFunc)(uint8_t* buf, uint32_t len);
  */
 AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config);
 
-/******************** target API ******************************/
+/**
+ * global function pointer for serial transmit funciton
+ */
+extern AJ_SerialTxFunc g_AJ_TX;
 
 /**
- * This function initialized the UART piece of the transport.
+ * This function initialized the UART piece of the transport. Should be called from AJ_SerialInit.
  */
 AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate);
 
