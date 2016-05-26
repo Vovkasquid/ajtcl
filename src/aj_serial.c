@@ -435,6 +435,7 @@ void AJ_SerialShutdown(void)
 {
     AJ_SerialTX_Shutdown();
     AJ_SerialRX_Shutdown();
+    AJ_SerialIOShutdown(); 
 }
 
 
