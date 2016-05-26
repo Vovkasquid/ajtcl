@@ -74,6 +74,10 @@ static struct {
 #define AJ_SERIAL_WINDOW_SIZE   2
 #define AJ_SERIAL_PACKET_SIZE   512 + AJ_SERIAL_HDR_LEN
 #define AJ_SERIAL_DEVICE "/dev/ttyUSB0"
+#define AJ_SERIAL_BITRATE 115200
+#define AJ_SERIAL_BITS 8
+#define AJ_SERIAL_STOPBITS 1
+#define AJ_SERIAL_PARITY 0 /* Zero disables parity checking, one means odd and two means even parity */
 
 AJ_Status AJ_Serial_Up()
 {
@@ -81,7 +85,7 @@ AJ_Status AJ_Serial_Up()
 
     AJ_InfoPrintf(("AJ_Serial_Up\n"));
     
-    return AJ_SerialInit(AJ_SERIAL_DEVICE, 115200, AJ_SERIAL_WINDOW_SIZE, AJ_SERIAL_PACKET_SIZE);
+    return AJ_SerialInit(AJ_SERIAL_DEVICE, AJ_SERIAL_BITRATE, AJ_SERIAL_WINDOW_SIZE, AJ_SERIAL_PACKET_SIZE);
 }
 
 AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate)
@@ -90,12 +94,12 @@ AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate)
 
     AJ_InfoPrintf(("AJ_SerialTargetInit %s\n", ttyName));
 
+    /* TODO: read from nvram, etc? */
     config.bitrate = bitRate;
     config.config = (const void *)ttyName;
-    /* TODO: read from nvram, etc? */
-    config.bits = 8;
-    config.stopBits = 1;
-    config.parity = 0;
+    config.bits = AJ_SERIAL_BITS;
+    config.stopBits = AJ_SERIAL_STOPBITS;
+    config.parity = AJ_SERIAL_PARITY;
 
     return  AJ_SerialIOInit(&config);
 }
