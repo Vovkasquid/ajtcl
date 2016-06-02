@@ -423,6 +423,12 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
 #endif
 
 #ifdef AJ_SERIAL_CONNECTION
+        status = AJ_Serial_Connect(bus);
+        if (status != AJ_OK) {
+            AJ_InfoPrintf(("AJ_FindBusAndConnect(): AJ_Serial_Connect status=%s\n", AJ_StatusText(status)));
+            goto ExitConnect;
+        }
+
         // run the state machine for long enough to (hopefully) do the SLAP handshake
         do {
             AJ_StateMachine();
@@ -595,9 +601,12 @@ void AJ_Disconnect(AJ_BusAttachment* bus)
     /*
      * Disconnect the network closing sockets etc.
      */
+#if defined(AJ_TCP) || defined(AJ_ARDP)
     AJ_Net_Disconnect(&bus->sock);
-
+#endif
+    
 #ifdef AJ_SERIAL_CONNECTION
+    AJ_Serial_Disconnect(&bus->sock);
     AJ_SerialShutdown();
 #endif
 

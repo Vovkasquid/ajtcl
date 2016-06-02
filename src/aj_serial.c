@@ -32,6 +32,7 @@
 #include <ajtcl/aj_serial_tx.h>
 #include <ajtcl/aj_serio.h>
 #include <ajtcl/aj_debug.h>
+#include <ajtcl/aj_config.h>
 
 /**
  * Turn on per-module debug printing by setting this variable to non-zero value
@@ -498,7 +499,75 @@ void ClearSlippedBuffer(volatile AJ_SlippedBuffer* buf)
     }
 }
 
-void AJ_SerialDisconnect(void)
+AJ_Status AJ_Serial_Connect(AJ_BusAttachment* bus)
+{
+    int ret;
+    static uint8_t rxData[AJ_RX_DATA_SIZE];
+    static uint8_t txData[AJ_TX_DATA_SIZE];
+
+    AJ_InfoPrintf(("AJ_Serial_Connect()\n"));
+
+    AJ_IOBufInit(&bus->sock.rx, rxData, sizeof(rxData), AJ_IO_BUF_RX, NULL);
+    bus->sock.rx.recv = AJ_Serial_Recv;
+    AJ_IOBufInit(&bus->sock.tx, txData, sizeof(txData), AJ_IO_BUF_TX, NULL);
+    bus->sock.tx.send = AJ_Serial_Send;
+
+    return AJ_OK;
+}
+
+AJ_Status AJ_Serial_Recv(AJ_IOBuffer* buf, uint32_t len, uint32_t timeout)
+{
+    AJ_Status status = AJ_OK;
+    size_t rx = AJ_IO_BUF_SPACE(buf);
+
+    AJ_InfoPrintf(("AJ_Serial_Recv()\n"));
+
+    assert(buf->direction == AJ_IO_BUF_RX);
+
+    rx = min(rx, len);
+    if (rx) {
+	uint16_t _recv;
+
+	status = AJ_SerialRecv(buf->writePtr, rx, timeout, &_recv);
+
+        if ((status != AJ_OK) || (_recv == 0)) {
+            AJ_ErrPrintf(("AJ_Serial_Recv(): failed with status %d (read %d bytes)\n", status, _recv));
+            status = AJ_ERR_READ;
+        } else {
+            AJ_InfoPrintf(("AJ_Serial_Recv(): recv'd %d\n", _recv));
+            buf->writePtr += _recv;
+        }
+    }
+    return status;
+}
+
+AJ_Status AJ_Serial_Send(AJ_IOBuffer* buf)
+{
+    size_t tx = AJ_IO_BUF_AVAIL(buf);
+
+    AJ_InfoPrintf(("AJ_Serial_Send(buf=0x%p)\n", buf));
+
+    assert(buf->direction == AJ_IO_BUF_TX);
+
+    if (tx > 0) {
+	AJ_Status status = AJ_SerialSend(buf->readPtr, tx);
+
+        if (status != AJ_OK) {
+            AJ_ErrPrintf(("AJ_Serial_Send(): failed. status=%d\n", status));
+            return status;
+        }
+        buf->readPtr += tx;
+    }
+
+    if (AJ_IO_BUF_AVAIL(buf) == 0) {
+        AJ_IO_BUF_RESET(buf);
+    }
+
+    AJ_InfoPrintf(("AJ_Net_Send(): status=AJ_OK\n"));
+    return AJ_OK;
+}
+
+void AJ_Serial_Disconnect(AJ_NetSocket* netSock)
 {
     AJ_Time start, now;
     AJ_InitTimer(&start);
@@ -519,6 +588,8 @@ void AJ_SerialDisconnect(void)
         }
 
     }
+
+    memset(netSock, 0, sizeof(AJ_NetSocket));
 }
 
 #endif /* AJ_SERIAL_CONNECTION */

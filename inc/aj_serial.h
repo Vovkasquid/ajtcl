@@ -23,6 +23,7 @@
 
 #include <ajtcl/aj_target.h>
 #include <ajtcl/aj_status.h>
+#include <ajtcl/aj_net.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -190,7 +191,7 @@ AJ_Status AJ_SerialSend(uint8_t* buffer,
  * Receive data from the serial transport. This function blocks until the request data has been
  * read into the buffer.
  *
- * @param buffer       The buffer containing the data to be sent
+ * @param buffer       The buffer containing the data to be received
  * @param len          The length of the buffer
  * @param timeout      The amount of time to wait for data to arrive
  * @param recv         The amount of data received
@@ -203,10 +204,31 @@ AJ_Status AJ_SerialRecv(uint8_t* buffer,
                         uint16_t* recv);
 
 /**
+ * Connect to bus
+ *
+ * @return        Return AJ_Status
+ */
+AJ_Status AJ_Serial_Connect(struct _AJ_BusAttachment* bus);
+
+/**
+ * Send from an I/O buffer
+ *
+ * @return        Return AJ_Status
+ */
+AJ_Status AJ_Serial_Send(AJ_IOBuffer* txBuf);
+
+/**
+ * Send into an I/O buffer
+ *
+ * @return        Return AJ_Status
+ */
+AJ_Status AJ_Serial_Recv(AJ_IOBuffer* rxBuf, uint32_t len, uint32_t timeout);
+
+/**
  * This function disconnects the serial transport layer.
  *
  */
-void AJ_SerialDisconnect(void);
+void AJ_Serial_Disconnect(AJ_NetSocket* netSock);
 
 /** The state machine which is called from AJ_SerialRecv and AJ_SerialSend.
  * This processes any buffers copied in the Recieve Callback, adds
