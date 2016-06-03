@@ -29,6 +29,10 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/file.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <ajtcl/aj_target.h>
 #include <ajtcl/aj_status.h>
@@ -56,6 +60,7 @@ uint8_t dbgTARGET_SERIAL = 0;
 
 static AJ_SerIORxCompleteFunc RecvCB;
 static AJ_SerIOTxCompleteFunc SendCB;
+static void *runRx(void *arg);
 
 /**
  * global function pointer for serial transmit funciton
@@ -79,13 +84,40 @@ static struct {
 #define AJ_SERIAL_STOPBITS 1
 #define AJ_SERIAL_PARITY 0 /* Zero disables parity checking, one means odd and two means even parity */
 
+static pthread_mutex_t rx_lock;
+static pthread_mutex_t tx_lock;
+static pthread_t rx_t;
+
 AJ_Status AJ_Serial_Up()
 {
     AJ_Status status;
+    int err;
 
     AJ_InfoPrintf(("AJ_Serial_Up\n"));
-    
-    return AJ_SerialInit(AJ_SERIAL_DEVICE, AJ_SERIAL_BITRATE, AJ_SERIAL_WINDOW_SIZE, AJ_SERIAL_PACKET_SIZE);
+
+    if (pthread_mutex_init(&rx_lock, NULL) != 0)
+    {
+        printf("\n rx mutex init failed\n");
+        return AJ_ERR_DRIVER;
+    }
+
+    if (pthread_mutex_init(&tx_lock, NULL) != 0)
+    {
+        printf("\n tx mutex init failed\n");
+        return AJ_ERR_DRIVER;
+    }
+
+    status = AJ_SerialInit(AJ_SERIAL_DEVICE, AJ_SERIAL_BITRATE, AJ_SERIAL_WINDOW_SIZE, AJ_SERIAL_PACKET_SIZE);
+
+    if (status == AJ_OK) {
+        err = pthread_create(&rx_t, NULL, &runRx, NULL);
+        if (err != 0) {
+            printf("\ncan't create thread :[%s]", strerror(err));
+            return AJ_ERR_DRIVER;
+        }
+    }
+
+    return status;
 }
 
 AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate)
@@ -112,7 +144,7 @@ static void readBytesFromUart(uint8_t* data, uint32_t len)
     static uint8_t ReadingMsg = FALSE;
 
     // if there is data ready,
-    AJ_InfoPrintf(("readBytesFromUart: %d\n", len));
+    //AJ_InfoPrintf(("readBytesFromUart: %d\n", len));
     AJ_ASSERT(rx_buf.data != NULL);
     while (len) {
         if (rx_buf.pos >= rx_buf.data + rx_buf.len) {
@@ -135,6 +167,7 @@ static void readBytesFromUart(uint8_t* data, uint32_t len)
                 rx_buf.pos = rx_buf.data = NULL;
                 rx_buf.len = 0;
                 ReadingMsg = FALSE;
+                AJ_InfoPrintf(("readBytesFromUart: got BOUNDARY_BYTE, data count %d\n", cnt));
                 RecvCB(buf, cnt);
             } else {
                 ReadingMsg = TRUE;
@@ -148,7 +181,7 @@ static void readBytesFromUart(uint8_t* data, uint32_t len)
 /* This function sets up a buffer for us to fill with RX data */
 void AJ_RX(uint8_t* buf, uint32_t len)
 {
-    //AJ_InfoPrintf(("AJ_RX: %d\n", len));
+    AJ_InfoPrintf(("AJ_RX: %d\n", len));
     AJ_ASSERT(buf != NULL);
     rx_buf.data = buf;
     rx_buf.pos = buf;
@@ -158,41 +191,86 @@ void AJ_RX(uint8_t* buf, uint32_t len)
 void AJ_PauseRX()
 {
     // Disable RX IRQ
+    AJ_InfoPrintf(("AJ_PauseRX\n"));
+    pthread_mutex_trylock(&rx_lock);   
 }
 
 void AJ_ResumeRX()
 {
     // Enable RX IRQ
+    AJ_InfoPrintf(("AJ_ResumeRX\n"));
+    pthread_mutex_unlock(&rx_lock);
 }
+
+static void *runRx(void *arg)
+{
+    fd_set fds;
+    int rc;
+    int ret = 0;
+
+    AJ_InfoPrintf(("runRx\n"));
+
+    for (;;) {
+        FD_ZERO(&fds);
+        FD_SET(serialFD, &fds);
+
+        rc = select(serialFD + 1, &fds, NULL, NULL, NULL);
+        if (rc <= 0) {
+            AJ_ErrPrintf(("runRx(): select() failed, rc=%d, errno=\"%s\"\n", rc, strerror(errno)));
+            return NULL;
+        }
+
+        if (FD_ISSET(serialFD, &fds)) {
+            uint8_t buf[7]; /* TODO? */
+            if ((ret = read(serialFD, buf, sizeof(buf))) <= 0) {
+                AJ_ErrPrintf(("runRx(): read() failed, ret=%d, errno=\"%s\"\n", ret, strerror(errno)));
+                continue;
+            }
+
+            //AJ_InfoPrintf(("runRx: read %d\n", ret));
+
+            pthread_mutex_lock(&rx_lock);   
+            readBytesFromUart(buf, ret);
+            pthread_mutex_unlock(&rx_lock);
+        }
+    }
+
+    return NULL;
+}
+
 
 static void runTx()
 {
     uint32_t len = tx_buf.len - (tx_buf.pos - tx_buf.data);
 
-    if (len) {
-        AJ_InfoPrintf(("runTx: (%d)\n", len));
+    AJ_InfoPrintf(("runTx: (%d)\n", len));
+
+    if (!len) {
+    return;
     }
 
-    if (!tx_buf.data || !tx_buf.pos || !tx_buf.len || !len /*|| !aci_state.data_credit_available*/) {
+    if (!tx_buf.data || !tx_buf.pos || !tx_buf.len) {
+        AJ_InfoPrintf(("runTx: bad status, return\n"));
         return;
     }
-/*
-    while (lib_aci_is_pipe_available(&aci_state, PIPE_UART_OVER_BTLE_UART_TX_TX) &&
-           len && (aci_state.data_credit_available >= 1)) {
-        uint32_t send_len = len > ACI_PIPE_TX_DATA_MAX_LEN ? ACI_PIPE_TX_DATA_MAX_LEN : len;
-        int status;
 
-        status = lib_aci_send_data(PIPE_UART_OVER_BTLE_UART_TX_TX, tx_buf.pos, send_len);
-        if (status) {
-            aci_state.data_credit_available--;
-            tx_buf.pos += send_len;
-            len -= send_len;
+    while (len) {
+        int ret = write(serialFD, tx_buf.pos, len);
+        if (ret == -1) {
+        if (errno == EAGAIN) {
+            /* ? */
+            AJ_InfoPrintf(("runTx: write() EAGAIN\n"));
         } else {
-            break;
+            AJ_InfoPrintf(("runTx: write() failed (fd = %u): %d - %s\n", serialFD, errno, strerror(errno)));
+        }
+        break;
+        } else {
+        len -= ret;
+                tx_buf.pos += ret;
         }
     }
-    AJ_InfoPrintf(("Tx (credits: %d)\n", aci_state.data_credit_available));
-*/
+
+    AJ_InfoPrintf(("runTx: finished, remaining bytes %d\n", len));
 }
 
 /* This function is requesting us to send data over our UART */
@@ -203,7 +281,23 @@ void __AJ_TX(uint8_t* buf, uint32_t len)
     tx_buf.pos = buf;
     tx_buf.len = len;
 
+    //    pthread_mutex_lock(&tx_lock);
     runTx();
+    if (tx_buf.data && (tx_buf.pos >= tx_buf.data + tx_buf.len)) {
+        uint8_t* b = tx_buf.data;
+        uint32_t l = tx_buf.pos - tx_buf.data;
+
+        /* Reset Tx data structure */
+        tx_buf.data = tx_buf.pos = NULL;
+        tx_buf.len = 0;
+
+        /* Acknowledge Send completion to upper layer */
+        AJ_InfoPrintf(("__AJ_TX: Acknowledge Send completion to upper layer, len=%d\n", l));
+        SendCB(b, l);
+    } else {
+        AJ_InfoPrintf(("__AJ_TX: No Acknowledge yet after runTx\n"));
+    }
+    //    pthread_mutex_unlock(&tx_lock);
 }
 
 void AJ_TX(uint8_t* buf, uint32_t len)
@@ -215,11 +309,15 @@ void AJ_TX(uint8_t* buf, uint32_t len)
 void AJ_PauseTX()
 {
     // Disable TX IRQ
+//    AJ_InfoPrintf(("AJ_PauseTX\n"));
+    pthread_mutex_trylock(&tx_lock);
 }
 
 void AJ_ResumeTX()
 {
     // Enable TX IRQ
+//    AJ_InfoPrintf(("AJ_ResumeTX\n"));
+    pthread_mutex_unlock(&tx_lock);
 }
 
 
@@ -403,7 +501,7 @@ AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
         goto error;
     }
 
-    AJ_InfoPrintf(("opened serial device %s successfully. ret = %d\n", (const char *)config->config, ret));
+    AJ_InfoPrintf(("opened serial device %s successfully. serialFD = %d\n", (const char *)config->config, serialFD));
 
     ret = tcflush(serialFD, TCIOFLUSH);
     if (ret) {
@@ -441,6 +539,9 @@ error:
 AJ_Status AJ_SerialIOShutdown(void)
 {
     AJ_InfoPrintf(("AJ_SerialIOShutdown\n"));
+    pthread_mutex_destroy(&rx_lock);
+    pthread_mutex_destroy(&tx_lock);
+    /* TODO: stop rx thread */
     return AJ_OK;
 }
 
