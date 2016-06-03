@@ -430,9 +430,9 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
         }
 
         // run the state machine for long enough to (hopefully) do the SLAP handshake
+        AJ_InitTimer(&connectionTimer);
         do {
             AJ_StateMachine();
-            AJ_InitTimer(&connectionTimer);
         } while (AJ_SerialLinkParams.linkState != AJ_LINK_ACTIVE && AJ_GetTimeDifference(&connectionTimer, &start) < timeout);
 
         if (AJ_SerialLinkParams.linkState != AJ_LINK_ACTIVE) {
