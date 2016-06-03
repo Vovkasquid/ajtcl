@@ -97,13 +97,13 @@ AJ_Status AJ_Serial_Up()
 
     if (pthread_mutex_init(&rx_lock, NULL) != 0)
     {
-        printf("\n rx mutex init failed\n");
+        AJ_ErrPrintf(("\n rx mutex init failed\n"));
         return AJ_ERR_DRIVER;
     }
 
     if (pthread_mutex_init(&tx_lock, NULL) != 0)
     {
-        printf("\n tx mutex init failed\n");
+        AJ_ErrPrintf(("\n tx mutex init failed\n"));
         return AJ_ERR_DRIVER;
     }
 
@@ -191,14 +191,14 @@ void AJ_RX(uint8_t* buf, uint32_t len)
 void AJ_PauseRX()
 {
     // Disable RX IRQ
-    AJ_InfoPrintf(("AJ_PauseRX\n"));
+    //AJ_InfoPrintf(("AJ_PauseRX\n"));
     pthread_mutex_trylock(&rx_lock);   
 }
 
 void AJ_ResumeRX()
 {
     // Enable RX IRQ
-    AJ_InfoPrintf(("AJ_ResumeRX\n"));
+    //AJ_InfoPrintf(("AJ_ResumeRX\n"));
     pthread_mutex_unlock(&rx_lock);
 }
 
@@ -208,7 +208,7 @@ static void *runRx(void *arg)
     int rc;
     int ret = 0;
 
-    AJ_InfoPrintf(("runRx\n"));
+    AJ_InfoPrintf(("runRx thread started\n"));
 
     for (;;) {
         FD_ZERO(&fds);
@@ -243,30 +243,30 @@ static void runTx()
 {
     uint32_t len = tx_buf.len - (tx_buf.pos - tx_buf.data);
 
-    AJ_InfoPrintf(("runTx: (%d)\n", len));
+    //AJ_InfoPrintf(("runTx: (%d)\n", len));
 
     if (!len) {
     return;
     }
 
     if (!tx_buf.data || !tx_buf.pos || !tx_buf.len) {
-        AJ_InfoPrintf(("runTx: bad status, return\n"));
+        AJ_ErrPrintf(("runTx: bad status, return\n"));
         return;
     }
 
     while (len) {
         int ret = write(serialFD, tx_buf.pos, len);
         if (ret == -1) {
-        if (errno == EAGAIN) {
-            /* ? */
-            AJ_InfoPrintf(("runTx: write() EAGAIN\n"));
+            if (errno == EAGAIN) {
+                /* ? */
+                AJ_ErrPrintf(("runTx: write() EAGAIN\n"));
+            } else {
+                AJ_ErrPrintf(("runTx: write() failed (fd = %u): %d - %s\n", serialFD, errno, strerror(errno)));
+            }
+            break;
         } else {
-            AJ_InfoPrintf(("runTx: write() failed (fd = %u): %d - %s\n", serialFD, errno, strerror(errno)));
-        }
-        break;
-        } else {
-        len -= ret;
-                tx_buf.pos += ret;
+            len -= ret;
+            tx_buf.pos += ret;
         }
     }
 
@@ -295,7 +295,7 @@ void __AJ_TX(uint8_t* buf, uint32_t len)
         AJ_InfoPrintf(("__AJ_TX: Acknowledge Send completion to upper layer, len=%d\n", l));
         SendCB(b, l);
     } else {
-        AJ_InfoPrintf(("__AJ_TX: No Acknowledge yet after runTx\n"));
+        AJ_InfoPrintf(("__AJ_TX: WARN: No Acknowledge yet after runTx\n"));
     }
     //    pthread_mutex_unlock(&tx_lock);
 }

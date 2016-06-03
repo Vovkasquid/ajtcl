@@ -249,6 +249,7 @@ static void SendLinkPacket()
         /**
          * Do nothing. No more link control packets to be sent.
          */
+        AJ_InfoPrintf(("State %d, Do nothing. No more link control packets to be sent.\n", AJ_SerialLinkParams.linkState));
         ScheduleLinkControlPacket(AJ_TIMER_FOREVER);
         break;
 
@@ -379,12 +380,14 @@ void AJ_Serial_LinkPacket(uint8_t* buffer, uint16_t len)
         break;
 
 
+    default:
+	/*
+	* Ignore any other packets.
+	*/
+        AJ_ErrPrintf(("Discarding link packet %d in state %d\n", pktType, AJ_SerialLinkParams.linkState));
+	break;
     }
 
-    /*
-     * Ignore any other packets.
-     */
-    AJ_ErrPrintf(("Discarding link packet %d in state %d\n", pktType, AJ_SerialLinkParams.linkState));
 }
 
 AJ_Status AJ_SerialInit(const char* ttyName,
@@ -456,9 +459,12 @@ void AJ_StateMachine()
     AJ_Time now;
     AJ_InitTimer(&now);
 
+    //AJ_InfoPrintf(("AJ_StateMachine.\n"));
+
     if (dataReceived) {
         /* Data has been received in the receive callback, process the data,
          * convert it into SLAP packets, validate and process the packets */
+    	AJ_InfoPrintf(("AJ_StateMachine: dataReceived, processing...\n"));
         AJ_ProcessRxBufferList();
     }
 
@@ -466,11 +472,13 @@ void AJ_StateMachine()
         /* There is space in the transmit free list, queue up more buffers to be
          * sent if there are SLAP packets to be sent
          */
+    	//AJ_InfoPrintf(("AJ_StateMachine: dataSent, queueing...\n"));
         AJ_FillTxBufferList();
     }
 
     if (AJ_CompareTime(resendTime, now) < 0) {
         /* Resend any data packets that have not been acked */
+    	AJ_InfoPrintf(("AJ_StateMachine: resendTime elapsed, re-sending...\n"));
         ResendPackets();
     }
 
@@ -480,11 +488,13 @@ void AJ_StateMachine()
          * this end didnt have data to send, so we send an explicit
          * ack packet.)
          */
+    	AJ_InfoPrintf(("AJ_StateMachine: ackTime elapsed, sending ACK...\n"));
         SendAck();
     }
 
     if (AJ_CompareTime(sendLinkPacketTime, now) < 0) {
         /* Time to send a link packet to get the Link to the active state. */
+    	AJ_InfoPrintf(("AJ_StateMachine: sendLinkPacketTime elapsed, sending LINK pkt...\n"));
         SendLinkPacket();
     }
 }
@@ -563,7 +573,7 @@ AJ_Status AJ_Serial_Send(AJ_IOBuffer* buf)
         AJ_IO_BUF_RESET(buf);
     }
 
-    AJ_InfoPrintf(("AJ_Net_Send(): status=AJ_OK\n"));
+    AJ_InfoPrintf(("AJ_Serial_Send(): status=AJ_OK\n"));
     return AJ_OK;
 }
 
