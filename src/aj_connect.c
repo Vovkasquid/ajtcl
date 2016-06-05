@@ -401,7 +401,8 @@ AJ_Status AJ_FindBusAndConnect(AJ_BusAttachment* bus, const char* serviceName, u
         // however, take this opportunity to bring up the serial connection
         status = AJ_Serial_Up();
         if (status != AJ_OK) {
-            AJ_InfoPrintf(("AJ_FindBusAndConnect(): AJ_Serial_Up status=%s\n", AJ_StatusText(status)));
+            AJ_InfoPrintf(("AJ_FindBusAndConnect(): FATAL: AJ_Serial_Up status=%s\n", AJ_StatusText(status)));
+            return status; /* fatal error, do not try to disconnect */
         }
 #else
         AJ_InitTimer(&connectionTimer);

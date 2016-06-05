@@ -216,7 +216,7 @@ static void *runRx(void *arg)
 
         rc = select(serialFD + 1, &fds, NULL, NULL, NULL);
         if (rc <= 0) {
-            AJ_ErrPrintf(("runRx(): select() failed, rc=%d, errno=\"%s\"\n", rc, strerror(errno)));
+            AJ_ErrPrintf(("runRx(): select() failed, exiting, rc=%d, errno=\"%s\"\n", rc, strerror(errno)));
             return NULL;
         }
 
@@ -229,8 +229,12 @@ static void *runRx(void *arg)
 
             //AJ_InfoPrintf(("runRx: read %d\n", ret));
 
-            pthread_mutex_lock(&rx_lock);   
-            readBytesFromUart(buf, ret);
+            if (pthread_mutex_lock(&rx_lock) == 0) {   
+                readBytesFromUart(buf, ret);
+            } else {
+                AJ_ErrPrintf(("runRx(): pthread_mutex_lock failed, assume shutdown, exiting.\n"));
+                return NULL;
+            }
             pthread_mutex_unlock(&rx_lock);
         }
     }
@@ -539,9 +543,14 @@ error:
 AJ_Status AJ_SerialIOShutdown(void)
 {
     AJ_InfoPrintf(("AJ_SerialIOShutdown\n"));
+    pthread_cancel(rx_t);
     pthread_mutex_destroy(&rx_lock);
     pthread_mutex_destroy(&tx_lock);
-    /* TODO: stop rx thread */
+    if (serialFD != -1) {
+        close(serialFD);
+        serialFD = -1;
+    }
+    pthread_join(rx_t, NULL);
     return AJ_OK;
 }
 
