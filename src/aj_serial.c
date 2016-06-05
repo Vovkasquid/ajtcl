@@ -511,7 +511,6 @@ void ClearSlippedBuffer(volatile AJ_SlippedBuffer* buf)
 
 AJ_Status AJ_Serial_Connect(AJ_BusAttachment* bus)
 {
-    int ret;
     static uint8_t rxData[AJ_RX_DATA_SIZE];
     static uint8_t txData[AJ_TX_DATA_SIZE];
 

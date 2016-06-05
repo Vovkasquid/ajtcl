@@ -370,7 +370,6 @@ static void CompletePacket()
     uint8_t pktType;
     uint16_t expectedLen;
 
-    uint8_t checksum;
     uint8_t* rcvdCrc = &pkt->buffer[pkt->len - 2];
     uint8_t checkCrc[2];
     uint16_t crc = AJ_SERIAL_CRC_INIT;
