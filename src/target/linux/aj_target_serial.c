@@ -67,9 +67,6 @@ static void *runRx(void *arg);
  */
 AJ_SerialTxFunc g_AJ_TX;
 
-/** Serial Port FD */
-static int serialFD = -1;
-
 static struct {
     uint8_t* data;
     uint32_t len;
@@ -139,12 +136,12 @@ AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate)
 /**
  * Interrupt handler for data arriving on the UART
  */
-static void readBytesFromUart(uint8_t* data, uint32_t len)
+void AJ_ReadBytesFromUart(uint8_t* data, uint32_t len)
 {
     static uint8_t ReadingMsg = FALSE;
 
     // if there is data ready,
-    //AJ_InfoPrintf(("readBytesFromUart: %d\n", len));
+    //AJ_InfoPrintf(("AJ_ReadBytesFromUart: %d\n", len));
     AJ_ASSERT(rx_buf.data != NULL);
     while (len) {
         if (rx_buf.pos >= rx_buf.data + rx_buf.len) {
@@ -167,7 +164,7 @@ static void readBytesFromUart(uint8_t* data, uint32_t len)
                 rx_buf.pos = rx_buf.data = NULL;
                 rx_buf.len = 0;
                 ReadingMsg = FALSE;
-                AJ_InfoPrintf(("readBytesFromUart: got BOUNDARY_BYTE, data count %d\n", cnt));
+                AJ_InfoPrintf(("AJ_ReadBytesFromUart: got BOUNDARY_BYTE, data count %d\n", cnt));
                 RecvCB(buf, cnt);
             } else {
                 ReadingMsg = TRUE;
@@ -204,39 +201,26 @@ void AJ_ResumeRX()
 
 static void *runRx(void *arg)
 {
-    fd_set fds;
-    int rc;
-    int ret = 0;
 
     AJ_InfoPrintf(("runRx thread started\n"));
 
     for (;;) {
-        FD_ZERO(&fds);
-        FD_SET(serialFD, &fds);
-
-        rc = select(serialFD + 1, &fds, NULL, NULL, NULL);
-        if (rc <= 0) {
-            AJ_ErrPrintf(("runRx(): select() failed, exiting, rc=%d, errno=\"%s\"\n", rc, strerror(errno)));
+        int ret;
+        uint8_t buf[7]; /* TODO? */
+        ret = AJ_SerialIOBlockingRead(buf, sizeof(buf));
+        if (ret == -1) {
+            AJ_ErrPrintf(("runRx(): AJ_SerialIOBlockingRead failed, exiting\n"));
             return NULL;
         }
+        //AJ_InfoPrintf(("runRx: read %d\n", ret));
 
-        if (FD_ISSET(serialFD, &fds)) {
-            uint8_t buf[7]; /* TODO? */
-            if ((ret = read(serialFD, buf, sizeof(buf))) <= 0) {
-                AJ_ErrPrintf(("runRx(): read() failed, ret=%d, errno=\"%s\"\n", ret, strerror(errno)));
-                continue;
-            }
-
-            //AJ_InfoPrintf(("runRx: read %d\n", ret));
-
-            if (pthread_mutex_lock(&rx_lock) == 0) {   
-                readBytesFromUart(buf, ret);
-            } else {
-                AJ_ErrPrintf(("runRx(): pthread_mutex_lock failed, assume shutdown, exiting.\n"));
-                return NULL;
-            }
-            pthread_mutex_unlock(&rx_lock);
+        if (pthread_mutex_lock(&rx_lock) == 0) {   
+            AJ_ReadBytesFromUart(buf, ret);
+        } else {
+            AJ_ErrPrintf(("runRx(): pthread_mutex_lock failed, assume shutdown, exiting.\n"));
+            return NULL;
         }
+        pthread_mutex_unlock(&rx_lock);
     }
 
     return NULL;
@@ -259,22 +243,15 @@ static void runTx()
     }
 
     while (len) {
-        int ret = write(serialFD, tx_buf.pos, len);
+        int ret = AJ_SerialIOWriteBytes(tx_buf.pos, len);
         if (ret == -1) {
-            if (errno == EAGAIN) {
-                /* ? */
-                AJ_ErrPrintf(("runTx: write() EAGAIN\n"));
-            } else {
-                AJ_ErrPrintf(("runTx: write() failed (fd = %u): %d - %s\n", serialFD, errno, strerror(errno)));
-            }
+            AJ_ErrPrintf(("runTx: AJ_SerialIOWriteBytes failed, exiting\n"));
             break;
         } else {
             len -= ret;
             tx_buf.pos += ret;
         }
     }
-
-    AJ_InfoPrintf(("runTx: finished, remaining bytes %d\n", len));
 }
 
 /* This function is requesting us to send data over our UART */
@@ -314,14 +291,14 @@ void AJ_PauseTX()
 {
     // Disable TX IRQ
 //    AJ_InfoPrintf(("AJ_PauseTX\n"));
-    pthread_mutex_trylock(&tx_lock);
+//    pthread_mutex_trylock(&tx_lock);
 }
 
 void AJ_ResumeTX()
 {
     // Enable TX IRQ
 //    AJ_InfoPrintf(("AJ_ResumeTX\n"));
-    pthread_mutex_unlock(&tx_lock);
+//    pthread_mutex_unlock(&tx_lock);
 }
 
 
@@ -362,194 +339,13 @@ void AJ_SetTxSerialTransmit(AJ_SerialTxFunc tx_func)
 }
 
 
-AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
-{
-    int ret;
-    struct termios ttySettings;
-    speed_t speed;
-
-    AJ_InfoPrintf(("AJ_SerialIOInit\n"));
-
-    serialFD = -1;
-
-    /*
-     * Validate and set parameters
-     */
-    memset(&ttySettings, 0, sizeof(ttySettings));
-    ttySettings.c_cflag |= CLOCAL | CREAD;
-
-    /*
-     * Set input and output baudrate
-     */
-    switch (config->bitrate) {
-    case 2400:
-        speed = B2400;
-        break;
-    case 9600:
-        speed = B9600;
-        break;
-    case 19200:
-        speed = B19200;
-        break;
-    case 38400:
-        speed = B38400;
-        break;
-    case 57600:
-        speed = B57600;
-        break;
-    case 115200:
-        speed = B115200;
-        break;
-    case 230400:
-        speed = B230400;
-        break;
-    case 460800:
-        speed = B460800;
-        break;
-    case 921600:
-        speed = B921600;
-        break;
-    case 1000000:
-        speed = B1000000;
-        break;
-    case 1152000:
-        speed = B1152000;
-        break;
-    case 1500000:
-        speed = B1500000;
-        break;
-    case 2000000:
-        speed = B2000000;
-        break;
-    case 2500000:
-        speed = B2500000;
-        break;
-    case 3000000:
-        speed = B3000000;
-        break;
-    case 3500000:
-        speed = B3500000;
-        break;
-    case 4000000:
-        speed = B4000000;
-        break;
-
-    default:
-        AJ_ErrPrintf(("Invalid bitrate %d\n", config->bitrate));
-        return AJ_ERR_INVALID;
-    }
-    cfsetospeed(&ttySettings, speed);
-    cfsetispeed(&ttySettings, speed);
-
-    switch (config->bits) {
-    case 5:
-        ttySettings.c_cflag |= CS5;
-        break;
-    case 6:
-        ttySettings.c_cflag |= CS6;
-        break;
-    case 7:
-        ttySettings.c_cflag |= CS7;
-        break;
-    case 8:
-        ttySettings.c_cflag |= CS8;
-        break;
-
-    default:
-        AJ_ErrPrintf(("Invalid databits %d\n", config->bits));
-        return AJ_ERR_INVALID;
-    }
-
-    switch (config->parity) {
-    case 0 /* 'n' */:
-        ttySettings.c_cflag &= ~(PARENB | PARODD);
-        break;
-    case 1 /* 'o' */:
-        ttySettings.c_iflag |= INPCK;
-        ttySettings.c_cflag |= PARENB | PARODD;
-        break;
-    case 2 /* 'e' */:
-        ttySettings.c_iflag |= INPCK;
-        ttySettings.c_cflag |= PARENB;
-        break;
-
-    default:
-        AJ_ErrPrintf(("Invalid parity %s\n", config->parity));
-        return AJ_ERR_INVALID;
-    }
-
-    switch (config->stopBits) {
-    case 1:
-        ttySettings.c_cflag &= ~CSTOPB;
-        break;
-    case 2:
-        ttySettings.c_cflag |= CSTOPB;
-        break;
-
-    default:
-        AJ_ErrPrintf(("Invalid Invalid stopbits %d\n", config->stopBits));
-        return AJ_ERR_INVALID;
-    }
-
-    ret = open((const char *)config->config, O_RDWR | O_NOCTTY | O_NONBLOCK);
-    if (ret == -1) {
-        AJ_ErrPrintf(("failed to open serial device %s. ret = %d, %d - %s\n", (const char *)config->config, ret, errno, strerror(errno)));
-        goto error;
-    }
-    serialFD = ret;
-
-    /* Lock this FD, to ensure exclusive access to this serial port. */
-    ret = flock(serialFD, LOCK_EX | LOCK_NB);
-    if (ret) {
-        AJ_ErrPrintf(("Lock serialFD %d failed with '%s'\n", serialFD, strerror(errno)));
-        goto error;
-    }
-
-    AJ_InfoPrintf(("opened serial device %s successfully. serialFD = %d\n", (const char *)config->config, serialFD));
-
-    ret = tcflush(serialFD, TCIOFLUSH);
-    if (ret) {
-        AJ_ErrPrintf(("Flush serialFD %d failed with '%s'\n", serialFD, strerror(errno)));
-        goto error;
-    }
-
-    /**
-     * Set the new options on the port
-     */
-    ret = tcsetattr(serialFD, TCSANOW, &ttySettings);
-    if (ret) {
-        AJ_ErrPrintf(("Set parameters serialFD %d failed with '%s'\n", serialFD, strerror(errno)));
-        goto error;
-    }
-
-    ret = tcflush(serialFD, TCIOFLUSH);
-    if (ret) {
-        AJ_ErrPrintf(("Flush serialFD %d failed with '%s'\n", serialFD, strerror(errno)));
-        goto error;
-    }
-
-//    AJ_SetSioCheck(aci_loop);
-    return AJ_OK;
-
-error:
-    if (serialFD != -1) {
-        close(serialFD);
-        serialFD = -1;
-    }
-    return AJ_ERR_DRIVER;
-
-}
-
 AJ_Status AJ_SerialIOShutdown(void)
 {
     AJ_InfoPrintf(("AJ_SerialIOShutdown\n"));
     pthread_cancel(rx_t);
     pthread_mutex_destroy(&rx_lock);
     pthread_mutex_destroy(&tx_lock);
-    if (serialFD != -1) {
-        close(serialFD);
-        serialFD = -1;
-    }
+    AJ_SerialIOClose();
     pthread_join(rx_t, NULL);
     return AJ_OK;
 }

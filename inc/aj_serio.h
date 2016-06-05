@@ -130,6 +130,23 @@ void AJ_TX(uint8_t* buf, uint32_t len);
 void AJ_PauseTX();
 void AJ_ResumeTX();
 
+/**
+ * Interrupt handler for data arriving on the UART
+ */
+void AJ_ReadBytesFromUart(uint8_t* data, uint32_t len);
+
+/**
+ * @return bytes written or -1
+ */
+int AJ_SerialIOWriteBytes(uint8_t* data, uint32_t len);
+/**
+ * @return bytes recevied or -1
+ */
+int AJ_SerialIOBlockingRead(uint8_t* data, uint32_t len);
+
+void AJ_SerialIOClose(void);
+
+
 #ifdef __cplusplus
 }
 #endif
