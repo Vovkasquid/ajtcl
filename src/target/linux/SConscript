@@ -1,4 +1,5 @@
 Import('src_env')
+Import('env')
 
 # Enable common components for Linux
 src_env['crypto'] = True
@@ -8,3 +9,8 @@ src_env['nvram'] = True
 
 # Build target source
 src_env['srcs'] += src_env.Glob('*.c')
+if 'socketcan' in env['connectivity_options']:
+  src_env['srcs'] += src_env.Glob('socketcan/*.c')
+else:
+  src_env['srcs'] += src_env.Glob('serial/*.c')
+   
