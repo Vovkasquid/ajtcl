@@ -54,7 +54,7 @@ static void clean_sequence(SEQUENCE *seq) {
 static void print_sequence(uint8_t seq_id) {
     int i;
     printf("seq %d: finished=%d len=%d pos=%d last=%d ",
-        seq_id, sequences[seq_id].finished, sequences[seq_id].len,  sequences[seq_id].pos, sequences[seq_id].final_chunk);
+            seq_id, sequences[seq_id].finished, sequences[seq_id].len,  sequences[seq_id].pos, sequences[seq_id].final_chunk);
     for (i = 0; i < MAX_CHUNKS; i++) {
         putchar(sequences[seq_id].chunk_done[i] ? '+' : '.');
     }
@@ -95,7 +95,7 @@ int AJ_SocketCAN_Open(const char *ifname) {
     for (i = 0; i < MAX_SEQUENCES; i++) {
         clean_sequence(sequences + i);
     }
-    
+
     return fd;
 }
 
@@ -105,7 +105,7 @@ static int process_frame(struct can_frame *frame) {
     uint8_t is_last = (frame->data[0] & 0x80);
     SEQUENCE *seq = sequences + seq_id;
 
-//    printf("got frame seq %d, chunk %d sz %d, data[0] = 0x%X\n", seq_id, chunk_num, frame->can_dlc, frame->data[0]);
+    //    printf("got frame seq %d, chunk %d sz %d, data[0] = 0x%X\n", seq_id, chunk_num, frame->can_dlc, frame->data[0]);
 
     if (is_last) {
         if (seq->final_chunk > 0) {
@@ -131,7 +131,7 @@ static int process_frame(struct can_frame *frame) {
 #ifdef SCAN_DEBUG
         if (seq->pending_chunk != chunk_num) {
             logInfo("seq %d: chunk %d is out-of-order, pending %d\n",
-               seq_id, chunk_num, seq->pending_chunk);
+                    seq_id, chunk_num, seq->pending_chunk);
             seq->pending_chunk = chunk_num + 1;
         } else {
             seq->pending_chunk++;
@@ -161,7 +161,7 @@ static SEQUENCE *have_finished(void) {
         if (active->len == 0) {
             return NULL; // did not get last chunk
         }
-        
+
         // check if all chunks up to last are received
         for (i = 0; i <= active->final_chunk; i++) {
             if (!active->chunk_done[i]) {
@@ -180,7 +180,6 @@ static SEQUENCE *have_finished(void) {
         }
 
         // mark as finished and return
-        logInfo("recvd sequence %d bytes\n", active->len);
         active->finished = 1;
         return active;
     }   
@@ -208,8 +207,8 @@ int AJ_SocketCAN_Read(int fd, uint8_t *buffer, int len, canid_t can_id) {
             int tocopy = MIN(len, (finished->len - finished->pos)); 
             memcpy(buffer, finished->buf + finished->pos, tocopy);
             finished->pos += tocopy;
-            len -= tocopy;
             buffer += tocopy;
+            len -= tocopy;
             overall += tocopy;
             if (check_and_close(finished)) {
                 // sequence finished, break
@@ -233,7 +232,7 @@ int AJ_SocketCAN_Read(int fd, uint8_t *buffer, int len, canid_t can_id) {
 
         if (((seq_id + 1) % MAX_SEQUENCES) == active_sequence) {
             logError("got frame from next-next sequence (%d), seems active sequence %d is stalled, drop it.\n",
-                seq_id, active_sequence);
+                    seq_id, active_sequence);
             //print_sequence(active_sequence);
             clean_sequence(sequences + active_sequence);
             active_sequence = ((active_sequence + 1) % MAX_SEQUENCES);
@@ -251,20 +250,19 @@ int AJ_SocketCAN_Read(int fd, uint8_t *buffer, int len, canid_t can_id) {
     return overall; 
 }
 
-int AJ_SocketCAN_Write(int fd, uint8_t *buffer, int len, canid_t can_id) {
-    static uint8_t write_sequence = -1;
+static int push_sequence(int fd, uint8_t *buffer, int len, canid_t can_id) {
+    static uint8_t write_sequence = -1; // TODO: think on multiple threads
     struct can_frame frame;
     int offset = 0;
     uint8_t chunk;
 
-    if (len <= 0) {
+    if (len <= 0 || len > MAX_PAYLOAD * MAX_CHUNKS) {
         logError("wrong len %d\n", len);
         return -1;
     }
 
-    len = MIN(len, MAX_PAYLOAD * MAX_CHUNKS);
     frame.can_id = can_id;
-    
+
     write_sequence = (write_sequence + 1) % MAX_SEQUENCES;
 
     chunk = 0;
@@ -287,10 +285,37 @@ int AJ_SocketCAN_Write(int fd, uint8_t *buffer, int len, canid_t can_id) {
             logError("write failed %d\n", nbytes);
             return -1;
         }
-        
+
         chunk++;
     }
 
     return offset; 
+}
+
+int AJ_SocketCAN_Write(int fd, uint8_t *buffer, int len, canid_t can_id) {
+    int actual = 0;
+
+    if (len <= 0) {
+        logError("wrong len %d\n", len);
+        return -1;
+    }
+
+    while (len > 0) {
+        int l = MIN(len, MAX_PAYLOAD * MAX_CHUNKS);
+        l = push_sequence(fd, buffer, l, can_id);
+        if (l < 0) {
+            return l; // error
+        }
+        actual += l;
+        len -= l;
+        buffer += l;
+    }
+
+    if (len != 0) {
+        logError("something went wrong... (%d instead of 0) \n", len);
+        return -1;
+    }
+
+    return actual; 
 }
 

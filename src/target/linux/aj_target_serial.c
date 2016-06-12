@@ -75,7 +75,7 @@ static struct {
 
 #define AJ_SERIAL_WINDOW_SIZE   2
 #define AJ_SERIAL_PACKET_SIZE   512 + AJ_SERIAL_HDR_LEN
-#define AJ_SERIAL_DEVICE "/dev/ttyUSB0"
+#define AJ_SERIAL_DEVICE "vcan0"
 #define AJ_SERIAL_BITRATE 115200
 #define AJ_SERIAL_BITS 8
 #define AJ_SERIAL_STOPBITS 1
@@ -199,6 +199,12 @@ void AJ_ResumeRX()
     pthread_mutex_unlock(&rx_lock);
 }
 
+/* This frame size is chosen so that most of the SLAP packets fit into one frame.
+ * If the packet doesnt fit within this, it will be read using two calls to read().
+ */
+#define RX_BUFSIZE  (640)
+static uint8_t RxBuffer[RX_BUFSIZE];
+
 static void *runRx(void *arg)
 {
 
@@ -206,8 +212,7 @@ static void *runRx(void *arg)
 
     for (;;) {
         int ret;
-        uint8_t buf[7]; /* TODO? */
-        ret = AJ_SerialIOBlockingRead(buf, sizeof(buf));
+        ret = AJ_SerialIOBlockingRead(RxBuffer, sizeof(RxBuffer));
         if (ret == -1) {
             AJ_ErrPrintf(("runRx(): AJ_SerialIOBlockingRead failed, exiting\n"));
             return NULL;
@@ -215,7 +220,7 @@ static void *runRx(void *arg)
         //AJ_InfoPrintf(("runRx: read %d\n", ret));
 
         if (pthread_mutex_lock(&rx_lock) == 0) {   
-            AJ_ReadBytesFromUart(buf, ret);
+            AJ_ReadBytesFromUart(RxBuffer, ret);
         } else {
             AJ_ErrPrintf(("runRx(): pthread_mutex_lock failed, assume shutdown, exiting.\n"));
             return NULL;
