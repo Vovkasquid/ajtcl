@@ -13,7 +13,7 @@ extern "C" {
 /**
  * @return binded socket fd or -1
  */
-extern int AJ_SocketCAN_Open(const char *ifname);
+int AJ_SocketCAN_Open(const char *ifname);
 
 int AJ_SocketCAN_Read(int fd, uint8_t *buffer, int len, canid_t can_id);
 int AJ_SocketCAN_Write(int fd, uint8_t *buffer, int len, canid_t can_id);
