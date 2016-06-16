@@ -39,6 +39,10 @@ if test_env['TARG'] == 'win32' or test_env['TARG'] == 'linux':
         test_env.Program('marshal_unmarshal_test', ['marshal_unmarshal_test.c'])
     ])
 
+    if 'socketcan' in env['connectivity_options']:
+      test_env.Program('socketcan_test_read', ['socketcan/socketcan_test_read.c'])
+      test_env.Program('socketcan_test_write', ['socketcan/socketcan_test_write.c'])
+
 #     if test_env['TARG'] == 'linux-uart':
 #         test_env.Object('uarttest.o', ['uarttest.c'])
 #         test_env.Object('uarttest1.o', ['uarttest1.c'])
