@@ -19,7 +19,7 @@
 
 //#define SCAN_DEBUG
 
-#define logError(s, ...) printf("E %s:%d " s, __FILE__, __LINE__, ##__VA_ARGS__)
+#define logError(s, ...) fprintf(stderr, "E %s:%d " s, __FILE__, __LINE__, ##__VA_ARGS__)
 #define logInfo(s, ...) printf("I %s:%d " s, __FILE__, __LINE__, ##__VA_ARGS__)
 
 typedef struct {
@@ -267,8 +267,6 @@ static int push_sequence(int fd, uint8_t *buffer, int len, canid_t can_id) {
 
     chunk = 0;
     while (len) {
-        int nbytes;
-
         frame.can_dlc = 1 + MIN(len, MAX_PAYLOAD);
         frame.data[0] = write_sequence | (chunk << 2);
 
@@ -280,10 +278,31 @@ static int push_sequence(int fd, uint8_t *buffer, int len, canid_t can_id) {
             frame.data[0] |= 0x80; // last chunk
         }   
 
-        nbytes = write(fd, &frame, sizeof(struct can_frame));
-        if (nbytes != sizeof(struct can_frame)) {
-            logError("write failed %d\n", nbytes);
-            return -1;
+        for (;;) {
+            int nbytes = 0;
+            fd_set wfds;
+
+            FD_ZERO(&wfds);
+            FD_SET(fd, &wfds);
+            if (select(fd + 1, NULL, &wfds, NULL, NULL) == -1) {
+                logError("Select error, errno %d ('%s')\n", errno, strerror(errno));
+                return -1;
+            }
+
+            if (FD_ISSET(fd, &wfds)) {
+                nbytes = write(fd, &frame, sizeof(struct can_frame));
+                if (nbytes != sizeof(struct can_frame)) {
+                    if (errno == ENOBUFS) {
+                        // Select could return too early, so that the next write will probably fail again. Just keep trying.
+                        continue;
+                    } else {
+                        logError("write can frame failed, nbytes=%d errno=%d \"%s\"\n", nbytes, errno, strerror(errno));
+                        return -1;
+                    }
+                } else {
+                    break;
+                }
+            }
         }
 
         chunk++;
