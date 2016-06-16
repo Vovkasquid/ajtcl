@@ -75,11 +75,21 @@ static struct {
 
 #define AJ_SERIAL_WINDOW_SIZE   2
 #define AJ_SERIAL_PACKET_SIZE   512 + AJ_SERIAL_HDR_LEN
-#define AJ_SERIAL_DEVICE "vcan0"
-#define AJ_SERIAL_BITRATE 115200
-#define AJ_SERIAL_BITS 8
-#define AJ_SERIAL_STOPBITS 1
-#define AJ_SERIAL_PARITY 0 /* Zero disables parity checking, one means odd and two means even parity */
+
+static const AJ_SerIOConfig serio_config = {
+#if defined(AJ_SOCKETCAN) // CAN
+    .dev = "vcan0",
+    .bitrate = 1000000,
+    .devconfig.can.target_can_id = 0x4BA,
+    .devconfig.can.server_can_id = 0x3BA
+#else // UART
+    .dev = "/dev/ttyUSB0",
+    .bitrate = 115200,
+    .devconfig.uart.bits = 8,
+    .devconfig.uart.stopBits = 1,
+    .devconfig.uart.parity = 0
+#endif
+};
 
 static pthread_mutex_t rx_lock;
 static pthread_mutex_t tx_lock;
@@ -104,7 +114,7 @@ AJ_Status AJ_Serial_Up()
         return AJ_ERR_DRIVER;
     }
 
-    status = AJ_SerialInit(AJ_SERIAL_DEVICE, AJ_SERIAL_BITRATE, AJ_SERIAL_WINDOW_SIZE, AJ_SERIAL_PACKET_SIZE);
+    status = AJ_SerialInit(serio_config.dev, serio_config.bitrate, AJ_SERIAL_WINDOW_SIZE, AJ_SERIAL_PACKET_SIZE);
 
     if (status == AJ_OK) {
         err = pthread_create(&rx_t, NULL, &runRx, NULL);
@@ -119,18 +129,8 @@ AJ_Status AJ_Serial_Up()
 
 AJ_Status AJ_SerialTargetInit(const char* ttyName, uint32_t bitRate)
 {
-    AJ_SerIOConfig config;
-
     AJ_InfoPrintf(("AJ_SerialTargetInit %s\n", ttyName));
-
-    /* TODO: read from nvram, etc? */
-    config.bitrate = bitRate;
-    config.config = (const void *)ttyName;
-    config.bits = AJ_SERIAL_BITS;
-    config.stopBits = AJ_SERIAL_STOPBITS;
-    config.parity = AJ_SERIAL_PARITY;
-
-    return  AJ_SerialIOInit(&config);
+    return  AJ_SerialIOInit(&serio_config);
 }
 
 /**

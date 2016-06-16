@@ -36,11 +36,19 @@ extern "C" {
  * A type for managing serial port configuration
  */
 typedef struct _AJ_SerIOConfig {
+    const char *dev; /**< The serio device to open */
     uint32_t bitrate;   /**< bitrate of the port */
-    uint8_t bits;       /**< The number of data bits */
-    uint8_t stopBits;  /**< The number of stop bits */
-    uint8_t parity;    /**< Zero disables parity checking, one means odd and two means even parity */
-    const void *config;    /**< Abstracted context for device/platform specific configuration items */
+    union {
+        struct {
+            uint8_t bits;       /**< The number of data bits */
+            uint8_t stopBits;  /**< The number of stop bits */
+            uint8_t parity;    /**< Zero disables parity checking, one means odd and two means even parity */
+        } uart;
+        struct {
+            uint32_t target_can_id;
+            uint32_t server_can_id;
+        } can;
+    } devconfig;
 } AJ_SerIOConfig;
 
 /**
@@ -106,7 +114,7 @@ typedef void (*AJ_SerialTxFunc)(uint8_t* buf, uint32_t len);
  *          - AJ_OK              if the serial subsystem was successfully initialized
  *          - AJ_ERR_UNEXPECTED  if one of the parameters is not supported
  */
-AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config);
+AJ_Status AJ_SerialIOInit(const AJ_SerIOConfig* config);
 
 /**
  * global function pointer for serial transmit funciton

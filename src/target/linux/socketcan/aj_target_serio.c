@@ -53,14 +53,18 @@ uint8_t dbgTARGET_SERIO = 0;
 #endif
 
 static int canFD = -1;
-static canid_t server_can_id = (canid_t)-1;
-static canid_t target_can_id = (canid_t)-1;
+static const AJ_SerIOConfig* serio_config = NULL;
 
 int AJ_SerialIOBlockingRead(uint8_t* data, uint32_t len)
 {
     int ret = 0;
 
-    if ((ret = AJ_SocketCAN_Read(canFD, data, len, server_can_id)) <= 0) {
+    if (serio_config == NULL) {
+        AJ_ErrPrintf(("AJ_SerialIOBlockingRead: not initialized\n"));
+        return -1;
+    }
+
+    if ((ret = AJ_SocketCAN_Read(canFD, data, len, serio_config->devconfig.can.server_can_id)) <= 0) {
         AJ_ErrPrintf(("AJ_SerialIOBlockingRead: AJ_SocketCAN_Read() failed, ret=%d, errno=\"%s\"\n",
             ret, strerror(errno)));
     }
@@ -70,28 +74,25 @@ int AJ_SerialIOBlockingRead(uint8_t* data, uint32_t len)
 
 int AJ_SerialIOWriteBytes(uint8_t* data, uint32_t len)
 {
-    //sleep(1);
-    return AJ_SocketCAN_Write(canFD, data, len, target_can_id);
+    if (serio_config == NULL) {
+        AJ_ErrPrintf(("AJ_SerialIOWriteBytes: not initialized\n"));
+        return -1;
+    }
+
+    return AJ_SocketCAN_Write(canFD, data, len, serio_config->devconfig.can.target_can_id);
 }
 
-AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
+AJ_Status AJ_SerialIOInit(const AJ_SerIOConfig* config)
 {
     int ret;
 
     AJ_InfoPrintf(("AJ_SerialIOInit\n"));
 
-    /*
-     * Validate and set parameters
-     */
+    serio_config = config;
 
-    /* TODO */
-    target_can_id = 0x4BA;
-    server_can_id = 0x3BA;    
-
-
-    ret = AJ_SocketCAN_Open((const char *)config->config);
+    ret = AJ_SocketCAN_Open(serio_config->dev);
     if (ret == -1) {
-        AJ_ErrPrintf(("failed to open socketcan device %s. ret = %d, %d - %s\n", (const char *)config->config, ret, errno, strerror(errno)));
+        AJ_ErrPrintf(("failed to open socketcan device %s. ret = %d, %d - %s\n", serio_config->dev, ret, errno, strerror(errno)));
         goto error;
     }
     canFD = ret;
@@ -102,6 +103,7 @@ error:
     if (canFD != -1) {
         close(canFD);
         canFD = -1;
+        serio_config = NULL;
     }
     return AJ_ERR_DRIVER;
 }
@@ -113,5 +115,6 @@ void AJ_SerialIOClose(void)
         close(canFD);
         canFD = -1;
     }
+    serio_config = NULL;
 }
 
