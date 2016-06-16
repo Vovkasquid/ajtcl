@@ -53,12 +53,18 @@ uint8_t dbgTARGET_SERIO = 0;
 /** Serial Port FD */
 static int serialFD = -1;
 
+static const AJ_SerIOConfig* serio_config = NULL;
 
 int AJ_SerialIOBlockingRead(uint8_t* data, uint32_t len)
 {
     fd_set fds;
     int rc;
     int ret = 0;
+
+    if (serio_config == NULL) {
+        AJ_ErrPrintf(("AJ_SerialIOBlockingRead: not initialized\n"));
+        return -1;
+    }
 
     for (;;) {
         FD_ZERO(&fds);
@@ -85,16 +91,24 @@ int AJ_SerialIOBlockingRead(uint8_t* data, uint32_t len)
 
 int AJ_SerialIOWriteBytes(uint8_t* data, uint32_t len)
 {
+
+    if (serio_config == NULL) {
+        AJ_ErrPrintf(("AJ_SerialIOWriteBytes: not initialized\n"));
+        return -1;
+    }
+
     return write(serialFD, data, len);
 }
 
-AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
+AJ_Status AJ_SerialIOInit(const AJ_SerIOConfig* config)
 {
     int ret;
     struct termios ttySettings;
     speed_t speed;
 
     AJ_InfoPrintf(("AJ_SerialIOInit\n"));
+
+    serio_config = NULL;
 
     serialFD = -1;
 
@@ -167,7 +181,7 @@ AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
     cfsetospeed(&ttySettings, speed);
     cfsetispeed(&ttySettings, speed);
 
-    switch (config->bits) {
+    switch (config->devconfig.uart.bits) {
     case 5:
         ttySettings.c_cflag |= CS5;
         break;
@@ -182,11 +196,11 @@ AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
         break;
 
     default:
-        AJ_ErrPrintf(("Invalid databits %d\n", config->bits));
+        AJ_ErrPrintf(("Invalid databits %d\n", config->devconfig.uart.bits));
         return AJ_ERR_INVALID;
     }
 
-    switch (config->parity) {
+    switch (config->devconfig.uart.parity) {
     case 0 /* 'n' */:
         ttySettings.c_cflag &= ~(PARENB | PARODD);
         break;
@@ -200,11 +214,11 @@ AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
         break;
 
     default:
-        AJ_ErrPrintf(("Invalid parity %s\n", config->parity));
+        AJ_ErrPrintf(("Invalid parity %s\n", config->devconfig.uart.parity));
         return AJ_ERR_INVALID;
     }
 
-    switch (config->stopBits) {
+    switch (config->devconfig.uart.stopBits) {
     case 1:
         ttySettings.c_cflag &= ~CSTOPB;
         break;
@@ -213,13 +227,13 @@ AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
         break;
 
     default:
-        AJ_ErrPrintf(("Invalid Invalid stopbits %d\n", config->stopBits));
+        AJ_ErrPrintf(("Invalid Invalid stopbits %d\n", config->devconfig.uart.stopBits));
         return AJ_ERR_INVALID;
     }
 
-    ret = open((const char *)config->config, O_RDWR | O_NOCTTY | O_NONBLOCK);
+    ret = open(config->dev, O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (ret == -1) {
-        AJ_ErrPrintf(("failed to open serial device %s. ret = %d, %d - %s\n", (const char *)config->config, ret, errno, strerror(errno)));
+        AJ_ErrPrintf(("failed to open serial device %s. ret = %d, %d - %s\n", config->dev, ret, errno, strerror(errno)));
         goto error;
     }
     serialFD = ret;
@@ -254,7 +268,7 @@ AJ_Status AJ_SerialIOInit(AJ_SerIOConfig* config)
         goto error;
     }
 
-//    AJ_SetSioCheck(aci_loop);
+    serio_config = config;
     return AJ_OK;
 
 error:

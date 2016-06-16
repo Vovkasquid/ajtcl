@@ -88,22 +88,23 @@ AJ_Status AJ_SerialIOInit(const AJ_SerIOConfig* config)
 
     AJ_InfoPrintf(("AJ_SerialIOInit\n"));
 
-    serio_config = config;
+    serio_config = NULL;
+    canFD = -1;
 
-    ret = AJ_SocketCAN_Open(serio_config->dev);
+    ret = AJ_SocketCAN_Open(config->dev);
     if (ret == -1) {
-        AJ_ErrPrintf(("failed to open socketcan device %s. ret = %d, %d - %s\n", serio_config->dev, ret, errno, strerror(errno)));
+        AJ_ErrPrintf(("failed to open socketcan device %s. ret = %d, %d - %s\n", config->dev, ret, errno, strerror(errno)));
         goto error;
     }
-    canFD = ret;
 
+    canFD = ret;
+    serio_config = config;
     return AJ_OK;
 
 error:
     if (canFD != -1) {
         close(canFD);
         canFD = -1;
-        serio_config = NULL;
     }
     return AJ_ERR_DRIVER;
 }
